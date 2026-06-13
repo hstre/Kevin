@@ -91,6 +91,22 @@ human's choice is recorded — and a process that *worked* is mined by
 `extract_method` into a **new content-free method**, so Layer 9 grows from
 successful thinking. The loop closes.
 
+### Predicting *where* the solution spaces are (DESi)
+
+Before the LLM proposes anything, a `SpacePredictor` predicts which regions are even
+open. It defines a fixed **universe of structural axes** (the dimensions any problem
+can be attacked along — mechanism, constraint, boundary, actor, temporal, incentive,
+material, inversion, …), works out which the problem's `known_approaches` already
+cover, and treats the rest as **blind spots**: plausible solution spaces nobody has
+worked. The coverage/blind-spot computation is **DESi's own**
+`blind_spot_mapping.coverage` (set union / intersection / symmetric difference) when
+`KEVIN_USE_DESI=1` and `desi-governance` is importable (or `DESI_ROOT` is set);
+otherwise the same set arithmetic runs in-house. Each predicted-open axis is seeded
+into the explorer as a low-exploration (high-opportunity) space, so the wild brother is
+actively sent where the room is — including axes the LLM never proposed. The prediction
+(engine, % unexplored, open vs covered axes) rides along on every run
+(`run.space_prediction`, the CLI `--trace`, and `POST /api/run`).
+
 ### Solution spaces, scored
 
 Each candidate region gets two deterministic scores and one derived signal:

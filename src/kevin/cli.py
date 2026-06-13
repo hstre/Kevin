@@ -46,6 +46,13 @@ def main(argv: list[str] | None = None) -> int:
         print("=" * 72)
         print("ROUTING TRACE")
         print("=" * 72)
+        pred = run.space_prediction or {}
+        if pred:
+            print(f"\nSolution-space prediction (engine: {pred.get('engine')}): "
+                  f"{int(pred.get('new_region_fraction', 0) * 100)}% of the structural space "
+                  f"is unexplored")
+            print(f"  open (blind-spot) axes: {', '.join(pred.get('blindspots', []))}")
+            print(f"  already covered       : {', '.join(pred.get('covered', [])) or '(none)'}")
         print("\nSolution spaces (sorted by opportunity = plausibility * (1 - exploration)):")
         for s in run.spaces:
             chosen = "  <- ROUTED" if s.id in run.chosen_spaces else ""
