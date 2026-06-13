@@ -66,6 +66,10 @@ class MockLLM:
          (Affinity.PROVENANCE, Affinity.ADVERSARIAL)),
         ("analogy", "a distant field with the same structural shape",
          (Affinity.ANALOGY, Affinity.DECOMPOSITION)),
+        ("level", "the right level of generality to attack it on",
+         (Affinity.ABSTRACTION, Affinity.DECOMPOSITION)),
+        ("synthesis", "what emerges when the parts interact, not the parts alone",
+         (Affinity.COMPOSITION, Affinity.CAUSAL)),
     ]
 
     _WILD_TEMPLATES = {

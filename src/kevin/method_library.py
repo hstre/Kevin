@@ -120,6 +120,138 @@ SEED_METHODS: tuple[Method, ...] = (
         ),
         affinities=(Affinity.ANALOGY, Affinity.DECOMPOSITION),
     ),
+    Method(
+        name="first_principles_reduction",
+        origin="philosophy",
+        summary="Strip away convention to the irreducible, then rebuild from there.",
+        steps=(
+            "Drop every assumption that is merely inherited or conventional.",
+            "Keep only what cannot be reduced further without contradiction.",
+            "Rebuild upward from those irreducibles, admitting nothing unearned.",
+        ),
+        affinities=(Affinity.DECOMPOSITION, Affinity.ABSTRACTION),
+    ),
+    Method(
+        name="dimensional_consistency",
+        origin="physics",
+        summary="Check that the kinds of things balance before trusting any combination.",
+        steps=(
+            "Name the kind of thing each quantity is, not just its size.",
+            "Check that combined quantities are of compatible kinds.",
+            "Reject any step where the kinds fail to balance.",
+        ),
+        affinities=(Affinity.INVARIANT, Affinity.BOUNDARY),
+    ),
+    Method(
+        name="conservation_tracking",
+        origin="physics",
+        summary="Find what can be neither created nor destroyed, and let the books balance.",
+        steps=(
+            "Identify a quantity that can be neither created nor destroyed here.",
+            "Account for every place it can flow into or out of.",
+            "Use the ledger that must balance to pin down the unknown.",
+        ),
+        affinities=(Affinity.INVARIANT, Affinity.CAUSAL),
+    ),
+    Method(
+        name="five_whys",
+        origin="manufacturing",
+        summary="Chase the causal chain past symptoms to the removable root.",
+        steps=(
+            "State the surface symptom plainly.",
+            "Ask why it occurs, then ask why of that answer, repeatedly.",
+            "Stop at the first cause whose removal prevents all the rest.",
+        ),
+        affinities=(Affinity.CAUSAL, Affinity.DECOMPOSITION),
+    ),
+    Method(
+        name="premortem",
+        origin="decision-science",
+        summary="Assume it already failed, then work backward into present safeguards.",
+        steps=(
+            "Assume the effort has already failed completely.",
+            "From that future, narrate the most likely story of how it failed.",
+            "Convert each step of that story into a safeguard you add now.",
+        ),
+        affinities=(Affinity.RISK, Affinity.INVERSION),
+    ),
+    Method(
+        name="steelman_then_test",
+        origin="rhetoric",
+        summary="Build the strongest opposing case, then keep only what survives it.",
+        steps=(
+            "Build the strongest possible version of the opposing position.",
+            "Grant it every charitable assumption it could fairly claim.",
+            "Keep your conclusion only if it survives that strongest opponent.",
+        ),
+        affinities=(Affinity.ADVERSARIAL, Affinity.PROVENANCE),
+    ),
+    Method(
+        name="base_rate_first",
+        origin="statistics",
+        summary="Anchor on how often it happens in general before the vivid particulars.",
+        steps=(
+            "Before the vivid particulars, find how often this happens in general.",
+            "Anchor your estimate on that background frequency.",
+            "Adjust only as far as specific, reliable evidence warrants.",
+        ),
+        affinities=(Affinity.PROVENANCE, Affinity.RISK),
+    ),
+    Method(
+        name="constraint_relaxation",
+        origin="optimization",
+        summary="Drop the hardest constraint, solve freely, then re-impose and keep what survives.",
+        steps=(
+            "Identify the single constraint that currently binds hardest.",
+            "Imagine it briefly removed and solve the freed problem.",
+            "Re-impose it and keep whatever of the free solution still stands.",
+        ),
+        affinities=(Affinity.INVERSION, Affinity.BOUNDARY),
+    ),
+    Method(
+        name="separation_of_concerns",
+        origin="software",
+        summary="Cut along axes that change for different reasons; recombine through narrow seams.",
+        steps=(
+            "Find the axes along which parts change for different reasons.",
+            "Cut along those axes so each part has one reason to change.",
+            "Recombine only through narrow, explicit interfaces.",
+        ),
+        affinities=(Affinity.DECOMPOSITION, Affinity.COMPOSITION),
+    ),
+    Method(
+        name="emergence_search",
+        origin="complexity",
+        summary="Specify simple local rules; read the global pattern off their interaction.",
+        steps=(
+            "List the simple local rules each part follows on its own.",
+            "Let many parts interact and watch for patterns no single part holds.",
+            "Attribute the global behaviour to the interaction, not the parts.",
+        ),
+        affinities=(Affinity.COMPOSITION, Affinity.CAUSAL),
+    ),
+    Method(
+        name="abstraction_ladder",
+        origin="general-semantics",
+        summary="Move up and down levels of generality; solve where the obstacle vanishes.",
+        steps=(
+            "Climb up: restate the problem at a more general level.",
+            "Climb down: restate it at a more concrete level.",
+            "Solve where the obstacle disappears, then translate the answer back.",
+        ),
+        affinities=(Affinity.ABSTRACTION, Affinity.ANALOGY),
+    ),
+    Method(
+        name="occams_pruning",
+        origin="philosophy",
+        summary="Among equally adequate explanations, prefer the one needing fewest assumptions.",
+        steps=(
+            "List every explanation that fits the evidence equally well.",
+            "Count the independent assumptions each one quietly requires.",
+            "Prefer the one carrying the fewest unearned assumptions.",
+        ),
+        affinities=(Affinity.EXCLUSION, Affinity.INVARIANT),
+    ),
 )
 
 

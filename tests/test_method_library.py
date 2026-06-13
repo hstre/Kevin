@@ -13,20 +13,41 @@ from kevin.models import (
 
 def test_methods_are_content_free():
     """Steps must describe shape, not domain objects - the whole thesis depends on it."""
-    forbidden = ("pulmonary", "embolism", "patient", "plaintiff", "defendant", "neo4j")
+    forbidden = (
+        "pulmonary", "embolism", "patient", "plaintiff", "defendant", "neo4j",
+        "voltage", "newton", "transistor", "toyota",
+    )
     for m in SEED_METHODS:
         blob = " ".join(m.steps).lower()
         for word in forbidden:
             assert word not in blob, f"method {m.name} leaked content: {word}"
 
 
+def test_library_is_substantial_and_diverse():
+    """The expanded library spans many domains - the cross-domain pool is the point."""
+    assert len(SEED_METHODS) >= 18
+    origins = {m.origin for m in SEED_METHODS}
+    assert len(origins) >= 12, f"too few distinct origins: {origins}"
+    # ids are unique (replay-stable, no collisions)
+    ids = [m.id for m in SEED_METHODS]
+    assert len(ids) == len(set(ids))
+
+
 def test_match_is_by_affinity_only():
     lib = MethodLibrary()
-    matched = lib.match((Affinity.BOUNDARY,), top_k=3)
+    matched = lib.match((Affinity.BOUNDARY,), top_k=len(lib.all()))
     assert any(m.name == "limit_case_analysis" for m in matched)
-    # A boundary query should not surface a pure-provenance method first.
-    assert matched[0].affinities  # has affinities
-    assert Affinity.BOUNDARY in matched[0].affinities
+    # Everything returned for a BOUNDARY query genuinely carries the BOUNDARY shape.
+    assert all(Affinity.BOUNDARY in m.affinities for m in matched)
+
+
+def test_new_affinity_shapes_are_reachable():
+    """The new ABSTRACTION / COMPOSITION shapes match real methods."""
+    lib = MethodLibrary()
+    abstraction = lib.match((Affinity.ABSTRACTION,))
+    composition = lib.match((Affinity.COMPOSITION,))
+    assert abstraction and all(Affinity.ABSTRACTION in m.affinities for m in abstraction)
+    assert composition and all(Affinity.COMPOSITION in m.affinities for m in composition)
 
 
 def test_match_empty_when_no_overlap():
