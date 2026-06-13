@@ -219,11 +219,19 @@ export KEVIN_USE_REAL_LLM=1        # everything else is unchanged
 make demo
 ```
 
-`DEEPSEEK_API_KEY` selects `deepseek-chat`; `OPENAI_API_KEY` selects `gpt-4o`. The
-language layer is the **only** thing that moves — the engines, routing and
-selection are byte-for-byte identical. Temperature is per-task (the wild brother
-runs hot, reading signals runs cold); the *routing* stays deterministic because it
-lives in the engines, not the model.
+`DEEPSEEK_API_KEY` selects `deepseek-chat`; `OPENAI_API_KEY` selects `gpt-4o`
+(`DEEPSEEK_API_KEY2` is also accepted). The language layer is the **only** thing
+that moves — the engines, routing and selection are byte-for-byte identical.
+Temperature is per-task (the wild brother runs hot, reading signals runs cold); the
+*routing* stays deterministic because it lives in the engines, not the model. The
+real client retries transient egress failures (`KEVIN_LLM_RETRIES` /
+`KEVIN_LLM_BACKOFF`) but never retries genuine auth/4xx errors.
+
+Two CI workflows: the default one runs offline (MockLLM) on every push; a separate
+`live-deepseek` workflow runs `scripts/live_smoke.py` against the real model on
+pushes to `main` and on manual dispatch, using the `DEEPSEEK_API_KEY` repository
+secret. Run the smoke test yourself with
+`KEVIN_USE_REAL_LLM=1 DEEPSEEK_API_KEY=sk-... python scripts/live_smoke.py`.
 
 ## Layout
 
