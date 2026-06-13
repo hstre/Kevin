@@ -145,6 +145,7 @@ def _serialise(run: CreativeRun) -> dict:
     briefing = build_briefing(run)
     return {
         "run_id": run.id,
+        "space_prediction": run.space_prediction,
         "problem": {
             "statement": run.problem.statement,
             "domain": run.problem.domain,

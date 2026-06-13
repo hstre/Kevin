@@ -293,6 +293,7 @@ class CreativeRun:
     """
 
     problem: Problem
+    space_prediction: dict | None = None   # where DESi predicts the open regions are
     spaces: list[SolutionSpace] = field(default_factory=list)
     chosen_spaces: list[str] = field(default_factory=list)
     variants: list[Variant] = field(default_factory=list)

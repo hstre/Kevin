@@ -62,27 +62,35 @@ class SolutionSpaceExplorer:
     def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
-    def explore(self, problem: Problem) -> list[SolutionSpace]:
-        """Return all candidate spaces, scored, sorted by opportunity (desc)."""
-        spaces: list[SolutionSpace] = []
+    def explore(
+        self, problem: Problem, *, extra_spaces: list[SolutionSpace] | None = None
+    ) -> list[SolutionSpace]:
+        """Return all candidate spaces, scored, sorted by opportunity (desc).
+
+        ``extra_spaces`` are predicted blind-spot regions (see ``SpacePredictor``):
+        merged in by axis, with the LLM's own proposals taking priority on a clash, so
+        Kevin probes the regions DESi predicts are open *in addition to* what the LLM
+        guesses. Default empty -> pure-LLM behaviour, unchanged.
+        """
+        by_axis: dict[str, SolutionSpace] = {}
         for raw in self._llm.propose_spaces(problem):
             affinities = tuple(
                 Affinity(a) for a in raw.get("affinities", []) if a in Affinity._value2member_map_
             )
             desc = raw["description"]
             axis = raw["axis"]
-            spaces.append(
-                SolutionSpace(
-                    label=raw["label"],
-                    description=desc,
-                    axis=axis,
-                    affinities=affinities,
-                    plausibility=_plausibility(problem, axis, desc),
-                    exploration=_exploration(problem, desc, axis),
-                )
+            by_axis[axis] = SolutionSpace(
+                label=raw["label"],
+                description=desc,
+                axis=axis,
+                affinities=affinities,
+                plausibility=_plausibility(problem, axis, desc),
+                exploration=_exploration(problem, desc, axis),
             )
+        for space in extra_spaces or ():
+            by_axis.setdefault(space.axis, space)   # LLM proposals win on a clash
         # Deterministic tie-break on id keeps ordering replay-stable.
-        return sorted(spaces, key=lambda s: (-s.opportunity, s.id))
+        return sorted(by_axis.values(), key=lambda s: (-s.opportunity, s.id))
 
     def select_underexplored(
         self, problem: Problem, *, top_k: int = 2, min_opportunity: float = 0.15

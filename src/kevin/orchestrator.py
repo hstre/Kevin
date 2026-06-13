@@ -25,6 +25,7 @@ from .method_library import MethodLibrary
 from .models import Candidate, CreativeRun, Problem, Variant
 from .selector import Selector
 from .solution_space import SolutionSpaceExplorer
+from .space_predictor import SpacePredictor
 from .wild_brother import WildBrother
 
 
@@ -37,6 +38,7 @@ class Kevin:
     ) -> None:
         self._llm = llm or get_default_client()
         self._explorer = SolutionSpaceExplorer(self._llm)
+        self._predictor = SpacePredictor()
         self._wild = WildBrother(self._llm)
         self._library = library or MethodLibrary()
         self._selector = Selector(self._llm)
@@ -61,11 +63,16 @@ class Kevin:
         """
         run = CreativeRun(problem=problem)
 
+        # 0. predict where the open solution spaces are (DESi blind-spot coverage),
+        #    then seed the explorer with those regions.
+        prediction = self._predictor.predict(problem)
+        run.space_prediction = prediction.to_dict()
+
         # 1-2. explore and route to under-worked, plausible regions.
         # Explore exactly once, then route over *those* spaces: under a real
         # (non-deterministic) LLM a second explore() would yield different spaces
         # with different ids, and the chosen ids would not match run.spaces.
-        run.spaces = self._explorer.explore(problem)
+        run.spaces = self._explorer.explore(problem, extra_spaces=prediction.seed_spaces)
         chosen = self._explorer.pick(run.spaces, top_k=top_spaces)
         run.chosen_spaces = [s.id for s in chosen]
 
