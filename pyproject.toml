@@ -27,6 +27,7 @@ dev = ["pytest>=8.0", "ruff>=0.5", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>
 [project.scripts]
 kevin = "kevin.cli:main"
 kevin-serve = "kevin.api:serve"
+kevin-trial = "kevin.trial_runner:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
