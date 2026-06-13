@@ -11,3 +11,5 @@ venv/
 .env
 *.log
 .DS_Store
+.kevin/
+*.jsonl

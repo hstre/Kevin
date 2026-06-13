@@ -319,7 +319,9 @@ class MethodLibrary:
 # --------------------------------------------------------------------------- #
 
 
-def extract_method(run: CreativeRun, winning_candidate_id: str, *, name: str) -> Method:
+def extract_method(
+    run: CreativeRun, winning_candidate_id: str, *, name: str | None = None
+) -> Method:
     """Mine a new, content-free method out of a process that worked.
 
     When a human marks a candidate as successful, the *sequence of moves* that led
@@ -329,7 +331,9 @@ def extract_method(run: CreativeRun, winning_candidate_id: str, *, name: str) ->
     it for ``MethodLibrary.add``.
 
     This realises the user's loop: "Layer 9 extracts abstract methods from earlier
-    successful thinking processes."
+    successful thinking processes." A ``name`` may be supplied by the human; if not,
+    one is derived from the (axis, move) shape - which also makes extraction
+    idempotent, since the same shape yields the same method id.
     """
     cand = next((c for c in run.candidates if c.id == winning_candidate_id), None)
     if cand is None:
@@ -348,7 +352,7 @@ def extract_method(run: CreativeRun, winning_candidate_id: str, *, name: str) ->
         "Discipline the wildest variant with a transferred method, then keep what is testable.",
     )
     return Method(
-        name=name,
+        name=name or f"learned_{axis_label}_{move_label}",
         origin="kevin",
         summary="A process pattern abstracted from a creative run that a human marked as working.",
         steps=steps,
