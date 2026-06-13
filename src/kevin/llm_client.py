@@ -128,17 +128,151 @@ class MockLLM:
         }
 
 
+class OpenAICompatibleLLM:
+    """A real language layer: DeepSeek / OpenAI, via the OpenAI-compatible SDK.
+
+    Matches the rest of the ecosystem (DESi / AleXiona ``llm_client.py``):
+    ``DEEPSEEK_API_KEY`` takes priority over ``OPENAI_API_KEY``; the client selects
+    ``deepseek-chat`` or ``gpt-4o`` accordingly. This class is the *only* place a
+    network call happens - the engines never change.
+
+    Temperature is the dial that used to be (wrongly) called "creativity": here it
+    is just per-task. The wild brother runs hot; reading a candidate into signals
+    runs cold. Routing and selection remain deterministic regardless, because they
+    live in the engines, not here.
+    """
+
+    # The closed affinity vocabulary the model must choose from - no open-world tags.
+    _AFFINITIES = ", ".join(a.value for a in Affinity)
+
+    def __init__(self, model: str | None = None, base_url: str | None = None,
+                 api_key: str | None = None) -> None:
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover - exercised only without the extra
+            raise RuntimeError(
+                "The real LLM client needs the 'openai' package. "
+                "Install it with: pip install 'kevin[llm]'"
+            ) from exc
+
+        deepseek = api_key or os.getenv("DEEPSEEK_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if deepseek:
+            self._model = model or "deepseek-chat"
+            self._client = OpenAI(api_key=deepseek,
+                                  base_url=base_url or "https://api.deepseek.com")
+        elif openai_key:
+            self._model = model or "gpt-4o"
+            self._client = OpenAI(api_key=openai_key, base_url=base_url)
+        else:  # pragma: no cover - config error path
+            raise RuntimeError(
+                "No LLM key found. Set DEEPSEEK_API_KEY or OPENAI_API_KEY "
+                "(see .env.example), or unset KEVIN_USE_REAL_LLM to use the MockLLM."
+            )
+
+    # -- low-level calls ---------------------------------------------------- #
+    def _chat(self, system: str, user: str, *, temperature: float, json: bool = False) -> str:
+        kwargs: dict = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+        }
+        if json:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = self._client.chat.completions.create(**kwargs)
+        return resp.choices[0].message.content or ""
+
+    @staticmethod
+    def _parse_json(raw: str) -> dict:
+        import json as _json
+
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            # Tolerate a fenced or chatty reply: grab the outermost {...}.
+            start, end = raw.find("{"), raw.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    return _json.loads(raw[start : end + 1])
+                except _json.JSONDecodeError:
+                    pass
+            return {}
+
+    # -- LLMClient surface -------------------------------------------------- #
+    def propose_spaces(self, problem: Problem) -> list[dict]:
+        system = (
+            "You map a problem into candidate SOLUTION SPACES (regions of possible "
+            "solutions, not solutions). For each, give a short label, a one-sentence "
+            "description, a one-word axis it varies along, and 1-3 affinity tags chosen "
+            f"ONLY from this closed set: [{self._AFFINITIES}]. "
+            'Reply as JSON: {"spaces": [{"label","description","axis","affinities"}]}.'
+        )
+        tried = ", ".join(problem.known_approaches) or "none"
+        user = (
+            f"Problem: {problem.statement}\nDomain: {problem.domain}\n"
+            f"Already tried (avoid re-suggesting these): {tried}"
+        )
+        data = self._parse_json(self._chat(system, user, temperature=0.4, json=True))
+        spaces = data.get("spaces", [])
+        return spaces if isinstance(spaces, list) else []
+
+    def write_variant(self, problem: Problem, space: SolutionSpace, move: WildMove) -> str:
+        system = (
+            "You are the WILD BROTHER: a free, aggressive, associative idea generator. "
+            "Your job is variation, not truth. Be bold; one or two sentences; no hedging."
+        )
+        user = (
+            f"Problem: {problem.statement}\n"
+            f"Region to explore: {space.label} - {space.description}\n"
+            f"Creative move to use: {move.value.replace('_', ' ')}.\n"
+            "Produce one wild variant using exactly that move."
+        )
+        # Hot - this is the place we *want* spread.
+        return self._chat(system, user, temperature=1.1).strip()
+
+    def phrase_transfer(self, target_text: str, step: str) -> str:
+        system = (
+            "You transfer an abstract, content-free thinking step onto a concrete idea. "
+            "Keep the step's STRUCTURE; bind it to the idea in one concrete sentence. "
+            "Do not import any content from the step's original domain."
+        )
+        user = f"Abstract step: {step}\nIdea to apply it to: {target_text}"
+        return self._chat(system, user, temperature=0.5).strip()
+
+    def read_signals(self, problem: Problem, candidate_text: str) -> dict:
+        system = (
+            "You READ an idea and report structured signals. You do NOT score or judge. "
+            'Reply as JSON with keys: has_falsifiable_claim (bool), '
+            "internal_contradiction (bool), has_concrete_mechanism (bool), "
+            "anchors (array of short strings tying it to the problem), "
+            "overlaps_known (bool: does it merely restate an already-tried approach?)."
+        )
+        user = (
+            f"Problem: {problem.statement}\n"
+            f"Already tried: {', '.join(problem.known_approaches) or 'none'}\n"
+            f"Idea: {candidate_text}"
+        )
+        data = self._parse_json(self._chat(system, user, temperature=0.0, json=True))
+        return {
+            "has_falsifiable_claim": bool(data.get("has_falsifiable_claim")),
+            "internal_contradiction": bool(data.get("internal_contradiction")),
+            "has_concrete_mechanism": bool(data.get("has_concrete_mechanism")),
+            "anchors": tuple(data.get("anchors", []) or ()),
+            "overlaps_known": bool(data.get("overlaps_known")),
+        }
+
+
 def get_default_client() -> LLMClient:
     """Return the configured client.
 
-    Without ``KEVIN_USE_REAL_LLM=1`` and a key, returns the deterministic
-    ``MockLLM`` - so tests, CI and a fresh clone all work with zero setup. Wiring a
-    real OpenAI-compatible client is intentionally left as a single, obvious seam.
+    Without ``KEVIN_USE_REAL_LLM=1``, returns the deterministic ``MockLLM`` - so
+    tests, CI and a fresh clone all work with zero setup. With it set, returns the
+    real OpenAI-compatible client (needs the ``llm`` extra and a key). The engines
+    are identical either way; only the language layer moves.
     """
     if os.getenv("KEVIN_USE_REAL_LLM") == "1":  # pragma: no cover - needs a key + network
-        raise NotImplementedError(
-            "Real LLM client not wired in this demonstrator. Implement an "
-            "OpenAI-compatible LLMClient and return it here (see DESi/AleXiona "
-            "llm_client.py for the pattern). Kevin's engines are unaffected."
-        )
+        return OpenAICompatibleLLM()
     return MockLLM()

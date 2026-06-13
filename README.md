@@ -123,6 +123,26 @@ python -m kevin "how do we make onboarding feel less like paperwork?" \
     --trace
 ```
 
+### Web UI / API
+
+```bash
+pip install -e ".[web]"
+make serve              # or: kevin-serve   ->   http://127.0.0.1:8000
+```
+
+A single-page UI (no build step) over the same engines. Endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`  | `/` | the UI |
+| `POST` | `/api/run` | run one creative pass → spaces, stats, verdict buckets |
+| `GET`  | `/api/methods` | the Layer-9 method library (content-free) |
+| `GET`  | `/api/verdicts` | the closed verdict set |
+| `GET`  | `/health` | liveness |
+
+The API is a *port*, not the system — it adds no creativity logic; it serialises a
+`CreativeRun` and the human briefing.
+
 As a library:
 
 ```python
@@ -154,10 +174,21 @@ print(build_briefing(run).render())
 ## Language layer
 
 Kevin ships with a deterministic `MockLLM` so the whole pipeline, the tests and CI
-run offline with zero setup. To wire a real OpenAI-compatible model (DeepSeek /
-GPT-4o, matching the rest of the ecosystem), implement the single seam in
-`kevin/llm_client.py:get_default_client()` and set `KEVIN_USE_REAL_LLM=1`. **No
-engine changes** — the language boundary is the only thing that moves.
+run offline with zero setup. A real OpenAI-compatible client is **wired**
+(`OpenAICompatibleLLM`, matching the rest of the ecosystem):
+
+```bash
+pip install -e ".[llm]"
+export DEEPSEEK_API_KEY=sk-...     # takes priority; or OPENAI_API_KEY
+export KEVIN_USE_REAL_LLM=1        # everything else is unchanged
+make demo
+```
+
+`DEEPSEEK_API_KEY` selects `deepseek-chat`; `OPENAI_API_KEY` selects `gpt-4o`. The
+language layer is the **only** thing that moves — the engines, routing and
+selection are byte-for-byte identical. Temperature is per-task (the wild brother
+runs hot, reading signals runs cold); the *routing* stays deterministic because it
+lives in the engines, not the model.
 
 ## Layout
 
@@ -172,7 +203,9 @@ src/kevin/
   human_gate.py      # the briefing; no decision is made here
   orchestrator.py    # Kevin — routes the whole pipeline
   cli.py / __main__  # python -m kevin
-tests/               # one suite per engine + a full-pipeline suite
+  api.py             # FastAPI port over the engines (kevin-serve)
+  web/index.html     # single-page UI, no build step
+tests/               # one suite per engine + full-pipeline + API suites
 ```
 
 ## Status
