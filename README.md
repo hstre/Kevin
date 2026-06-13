@@ -145,12 +145,38 @@ A single-page UI (no build step) over the same engines. Endpoints:
 |---|---|---|
 | `GET`  | `/` | the UI |
 | `POST` | `/api/run` | run one creative pass → spaces, stats, verdict buckets |
-| `GET`  | `/api/methods` | the Layer-9 method library (content-free) |
+| `POST` | `/api/promote` | mark a candidate as *worked* → learn a method from the run |
+| `GET`  | `/api/methods` | the Layer-9 method library (seed + learned) |
 | `GET`  | `/api/verdicts` | the closed verdict set |
 | `GET`  | `/health` | liveness |
 
 The API is a *port*, not the system — it adds no creativity logic; it serialises a
 `CreativeRun` and the human briefing.
+
+### Growing the library from real runs
+
+This closes the loop the design calls for: *Layer 9 extracts abstract methods from
+earlier successful thinking processes.*
+
+When a human clicks **“this worked”** on a candidate (or `POST /api/promote`), Kevin
+mines a **content-free** method from that run — which region was opened, which wild
+move fired — and appends it to an append-only **Layer-9 ledger** (`layer9.py`, a
+JSONL file). On the next start the library is *seed + everything ever learned*, and
+the new method is immediately matchable, so it can discipline wild variants in
+future runs. The library stops being fixed and starts carrying the shape of every
+process a person found valuable.
+
+```
+run ──► human marks a candidate “worked” ──► extract_method (content-free)
+                                                   │
+                                                   ▼
+                              append to ledger ◄── add to library ──► reused in later runs
+```
+
+- Idempotent: a method id is a content hash, so re-learning the same shape is a no-op.
+- Append-only: the ledger is never rewritten, only extended — and it is plain JSONL,
+  meant to be read and diffed.
+- Ledger location: `~/.kevin/layer9.jsonl`, override with `KEVIN_LAYER9`.
 
 As a library:
 
@@ -210,11 +236,12 @@ src/kevin/
   method_library.py  # stage 4: Layer-9 content-free methods + transfer + extraction
   selector.py        # stage 5: deterministic epistemic selection
   human_gate.py      # the briefing; no decision is made here
+  layer9.py          # append-only ledger: the library grows from runs (extract_method)
   orchestrator.py    # Kevin — routes the whole pipeline
   cli.py / __main__  # python -m kevin
   api.py             # FastAPI port over the engines (kevin-serve)
   web/index.html     # single-page UI, no build step
-tests/               # one suite per engine + full-pipeline + API suites
+tests/               # one suite per engine + full-pipeline + API + ledger suites
 ```
 
 ## Status

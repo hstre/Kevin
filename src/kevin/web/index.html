@@ -57,6 +57,16 @@
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #0b0e13;
     border-top-color: transparent; border-radius: 50%; animation: s .7s linear infinite; vertical-align: -2px; }
   @keyframes s { to { transform: rotate(360deg); } }
+  .lib { margin-top: 14px; font-size: 12px; color: var(--mut); border-top: 1px solid var(--line); padding-top: 12px; }
+  .lib b { color: var(--good); }
+  .worked { margin-top: 8px; background: transparent; color: var(--good); border: 1px solid var(--good);
+    border-radius: 7px; padding: 4px 10px; font-size: 12px; font-weight: 600; width: auto; cursor: pointer; }
+  .worked:disabled { opacity: .6; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2);
+    border: 1px solid var(--good); color: var(--ink); padding: 10px 16px; border-radius: 9px; font-size: 13px;
+    opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90vw; }
+  #toast.show { opacity: 1; }
+  .learned-pill { color: var(--good); border-color: var(--good); }
 </style>
 </head>
 <body>
@@ -92,7 +102,8 @@ a welcome email</textarea>
       <span>4 · method transfer</span><span>5 · selection</span><span>→ human</span>
     </div>
     <div id="err" class="err"></div>
-    <p style="margin-top:16px"><a class="methods" onclick="showMethods()">▸ Layer-9 method library</a></p>
+    <div class="lib" id="lib">Layer 9: loading…</div>
+    <p style="margin-top:12px"><a class="methods" onclick="showMethods()">▸ Layer-9 method library</a></p>
     <div id="methods"></div>
   </div>
 
@@ -101,11 +112,24 @@ a welcome email</textarea>
     <p class="empty">Run a problem to see the routed possibility space.</p>
   </div>
 </div>
+<div id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 const lines = s => s.split("\n").map(x => x.trim()).filter(Boolean);
 const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let currentRun = null;
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+function setLib(info) {
+  if (!info) return;
+  $("lib").innerHTML = `Layer 9 · <b>${info.total}</b> methods
+    (${info.seed} seed + <b>${info.learned}</b> learned from runs)`;
+}
 
 async function run() {
   $("err").textContent = "";
@@ -142,10 +166,36 @@ function cand(c) {
       <span>connectivity ${c.connectivity}</span><span>novelty ${c.novelty}</span>
     </div>
     <div class="reason">${esc(c.reason)}</div>
+    <button class="worked" onclick="promote('${c.id}', this)">★ this worked — learn it</button>
   </div>`;
 }
 
+async function promote(candId, btn) {
+  if (!currentRun) return;
+  const name = (prompt("Name this method (optional). Kevin abstracts it content-free and "
+    + "reuses it in future runs:", "") || "").trim() || null;
+  btn.disabled = true; btn.textContent = "learning…";
+  try {
+    const r = await fetch("/api/promote", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({run_id: currentRun, candidate_id: candId, name}),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status + " — " + (await r.text()));
+    const d = await r.json();
+    setLib(d.library);
+    toast(d.already_known
+      ? `Already in Layer 9: ${d.learned.name}`
+      : `Learned “${d.learned.name}” → ${d.library.learned} learned, reusable from now on`);
+    btn.textContent = "★ learned"; btn.classList.add("learned-pill");
+    if (methodsShown) { methodsShown = false; showMethods(); }   // refresh the drawer
+  } catch (e) {
+    toast(e.message); btn.disabled = false; btn.textContent = "★ this worked — learn it";
+  }
+}
+
 function render(d) {
+  currentRun = d.run_id;
+  setLib(d.library);
   const s = d.stats;
   let html = `<div class="stats">
     <span><b>${s.spaces}</b> spaces</span><span><b>${s.routed}</b> routed</span>
@@ -178,16 +228,21 @@ function render(d) {
 let methodsShown = false;
 async function showMethods() {
   if (methodsShown) { $("methods").innerHTML = ""; methodsShown = false; return; }
-  const r = await fetch("/api/methods");
-  const d = await r.json();
-  $("methods").innerHTML = d.methods.map(m =>
+  const d = await (await fetch("/api/methods")).json();
+  setLib(d.library);
+  // Learned methods first, so growth from your runs is visible at a glance.
+  const ms = [...d.methods].sort((a, b) => (b.learned === true) - (a.learned === true));
+  $("methods").innerHTML = ms.map(m =>
     `<div class="cand"><p><b>${esc(m.name)}</b>
-       <span class="pill">${esc(m.origin)}</span></p>
+       <span class="pill ${m.learned ? 'learned-pill' : ''}">${m.learned ? 'learned' : esc(m.origin)}</span></p>
        <div class="reason" style="font-style:normal">${esc(m.summary)}</div>
        <div class="metrics" style="margin-top:6px">${m.affinities.map(a=>'<span class="pill">'+esc(a)+'</span>').join("")}</div>
      </div>`).join("");
   methodsShown = true;
 }
+
+// Populate the Layer-9 badge on load so growth is visible before the first run.
+fetch("/api/methods").then(r => r.json()).then(d => setLib(d.library)).catch(() => {});
 </script>
 </body>
 </html>
