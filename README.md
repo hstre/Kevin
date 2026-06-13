@@ -194,6 +194,24 @@ run ──► human marks a candidate “worked” ──► extract_method (con
   meant to be read and diffed.
 - Ledger location: `~/.kevin/layer9.jsonl`, override with `KEVIN_LAYER9`.
 
+### Trialing the shared shelf (`kevin-trial`)
+
+Joni *harvests* methods he finds (arXiv / HN / HuggingFace / GitHub) onto the shared
+`desi_layer9` core as **candidates** — he fills the shelf but never tries anything. Kevin
+is the one who puts them to work: it pulls every candidate/provisional method off the
+shelf, runs a deterministic **transfer trial** (can this be re-applied as a content-free
+move?), and records the outcome through the gate. Kevin **never promotes** — it only
+reports trials. Once a *provisional* method has ≥3 trials with more wins than losses it is
+flagged *activation-ready*, and a human/operator makes the final `provisional → active`
+call.
+
+```bash
+kevin-trial state/layer9.json --run-id $(date +%s)   # one trial per method per run id
+```
+
+Programmatically, `trial_runner.trial_methods(core, run_id=…)` trials an in-memory core
+(this is what Joni invokes each cycle on the live shelf).
+
 As a library:
 
 ```python
