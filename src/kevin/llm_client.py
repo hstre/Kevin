@@ -18,9 +18,31 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from typing import Protocol, runtime_checkable
 
 from .models import Affinity, Problem, SolutionSpace, WildMove
+
+# Substrings that mark a *transient* failure worth retrying. Notably includes the
+# proxied-egress quirk seen in managed environments, where DNS occasionally returns
+# no records ("resolve_no_records" / "private/reserved IP") for a host that is in
+# fact reachable. Genuine auth/4xx errors do not match and are never retried.
+_TRANSIENT_MARKERS = (
+    "resolve_no_records", "private/reserved", "temporarily", "timeout", "timed out",
+    "connection", "overloaded", "rate limit", "too many requests",
+    "502", "503", "504", "bad gateway", "service unavailable", "gateway timeout",
+)
+_TRANSIENT_EXCEPTIONS = {
+    "APIConnectionError", "APITimeoutError", "RateLimitError",
+    "InternalServerError", "APIStatusError",
+}
+
+
+def _is_transient(exc: Exception) -> bool:
+    if type(exc).__name__ in _TRANSIENT_EXCEPTIONS:
+        return True
+    blob = str(exc).lower()
+    return any(marker in blob for marker in _TRANSIENT_MARKERS)
 
 
 @runtime_checkable
@@ -174,6 +196,10 @@ class OpenAICompatibleLLM:
                 "(see .env.example), or unset KEVIN_USE_REAL_LLM to use the MockLLM."
             )
 
+        # Transient-failure retry (e.g. proxied-egress DNS flakiness). Configurable.
+        self._max_retries = int(os.getenv("KEVIN_LLM_RETRIES", "4"))
+        self._backoff_base = float(os.getenv("KEVIN_LLM_BACKOFF", "0.5"))
+
     # -- low-level calls ---------------------------------------------------- #
     def _chat(self, system: str, user: str, *, temperature: float, json: bool = False) -> str:
         kwargs: dict = {
@@ -186,8 +212,18 @@ class OpenAICompatibleLLM:
         }
         if json:
             kwargs["response_format"] = {"type": "json_object"}
-        resp = self._client.chat.completions.create(**kwargs)
-        return resp.choices[0].message.content or ""
+
+        last: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = self._client.chat.completions.create(**kwargs)
+                return resp.choices[0].message.content or ""
+            except Exception as exc:  # noqa: BLE001 - retry only transient, re-raise the rest
+                if attempt >= self._max_retries or not _is_transient(exc):
+                    raise
+                last = exc
+                time.sleep(self._backoff_base * (2 ** attempt))
+        raise last  # unreachable, but keeps the type checker honest
 
     @staticmethod
     def _parse_json(raw: str) -> dict:

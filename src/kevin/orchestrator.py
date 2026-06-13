@@ -62,8 +62,11 @@ class Kevin:
         run = CreativeRun(problem=problem)
 
         # 1-2. explore and route to under-worked, plausible regions.
+        # Explore exactly once, then route over *those* spaces: under a real
+        # (non-deterministic) LLM a second explore() would yield different spaces
+        # with different ids, and the chosen ids would not match run.spaces.
         run.spaces = self._explorer.explore(problem)
-        chosen = self._explorer.select_underexplored(problem, top_k=top_spaces)
+        chosen = self._explorer.pick(run.spaces, top_k=top_spaces)
         run.chosen_spaces = [s.id for s in chosen]
 
         # 3. wild variation, only inside the routed spaces.

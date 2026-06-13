@@ -92,9 +92,21 @@ class SolutionSpaceExplorer:
         This is the routing decision the user's design hinges on: send the wild
         brother *only* into plausible-but-unworked territory, not everywhere.
         """
-        ranked = self.explore(problem)
-        picked = [s for s in ranked if s.opportunity >= min_opportunity][:top_k]
+        return self.pick(self.explore(problem), top_k=top_k, min_opportunity=min_opportunity)
+
+    @staticmethod
+    def pick(
+        spaces: list[SolutionSpace], *, top_k: int = 2, min_opportunity: float = 0.15
+    ) -> list[SolutionSpace]:
+        """Select the top under-worked regions from an *already-ranked* space list.
+
+        Kept separate from ``explore`` so a caller can route over the *same* spaces it
+        will later vary - critical under a real (non-deterministic) LLM, where calling
+        ``explore`` twice would yield two different sets of spaces with different ids.
+        Assumes ``spaces`` is sorted by opportunity (as ``explore`` returns them).
+        """
+        picked = [s for s in spaces if s.opportunity >= min_opportunity][:top_k]
         # Never return empty if anything plausible exists - take the best regardless.
-        if not picked and ranked:
-            picked = ranked[:1]
+        if not picked and spaces:
+            picked = spaces[:1]
         return picked

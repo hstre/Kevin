@@ -22,6 +22,9 @@ def test_full_run_produces_a_routed_creative_run():
     # Only routed spaces are varied.
     varied_spaces = {v.space_id for v in run.variants}
     assert varied_spaces <= set(run.chosen_spaces)
+    # Chosen spaces must be a subset of the explored spaces - the orchestrator must
+    # route over the same spaces it recorded (would fail if explore() ran twice).
+    assert set(run.chosen_spaces) <= {s.id for s in run.spaces}
 
 
 def test_wild_variants_get_method_disciplined():
