@@ -46,6 +46,13 @@
   .pill { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
     margin-right: 6px; border: 1px solid var(--line); color: var(--mut); }
   .pill.m { color: var(--wild); border-color: var(--wild); }
+  .pill.open { color: var(--wild); border-color: var(--wild); }
+  .predict { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 6px; }
+  .predict .prow { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--mut); margin-bottom: 8px; }
+  .predict .prow b { color: var(--ink); }
+  .pwrap { margin-top: 8px; } .plabel { font-size: 11px; color: var(--mut);
+    text-transform: uppercase; letter-spacing: .5px; margin-right: 8px; }
   .metrics { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--mut); }
   .metrics b { color: var(--ink); }
   .reason { font-size: 12px; color: var(--mut); margin-top: 6px; font-style: italic; }
@@ -201,6 +208,22 @@ function render(d) {
     <span><b>${s.spaces}</b> spaces</span><span><b>${s.routed}</b> routed</span>
     <span><b>${s.variants}</b> wild variants</span><span><b>${s.transfers}</b> method transfers</span>
     <span><b>${s.candidates}</b> candidates</span></div>`;
+
+  const p = d.space_prediction;
+  if (p) {
+    const pct = Math.round((p.new_region_fraction || 0) * 100);
+    const open = (p.blindspots || []).map(a => '<span class="pill open">' + esc(a) + '</span>').join('');
+    const cov = (p.covered && p.covered.length ? p.covered : ['—'])
+      .map(a => '<span class="pill">' + esc(a) + '</span>').join('');
+    html += `<div class="sec-title">Where the room is · blind-spot prediction (engine: ${esc(p.engine)})</div>`;
+    html += `<div class="predict">
+      <div class="prow"><span><b>${pct}%</b> of the structural space unexplored</span>
+        <span>${(p.blindspots||[]).length} open / ${esc(p.universe_size)} axes</span>
+        <span>redundancy ${esc(p.redundancy)}</span></div>
+      <div class="bar"><i style="width:${pct}%;background:var(--wild)"></i></div>
+      <div class="pwrap"><span class="plabel">open</span>${open}</div>
+      <div class="pwrap"><span class="plabel">covered</span>${cov}</div></div>`;
+  }
 
   html += `<div class="sec-title">Solution spaces · opportunity = plausibility × (1 − exploration)</div>`;
   for (const sp of d.spaces) {

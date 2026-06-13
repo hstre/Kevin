@@ -47,6 +47,11 @@ def test_run_returns_routed_possibility_space():
     total = len(d["promising"]) + len(d["tentative"]) + len(d["rejected"])
     assert total == d["stats"]["candidates"]
     assert set(d["decision_axes"]) == {"direction", "taste", "risk", "value"}
+    # the blind-spot prediction rides along
+    pred = d["space_prediction"]
+    assert pred and pred["engine"] in {"kevin-builtin", "DESi"}
+    assert pred["blindspots"]
+    assert 0.0 <= pred["new_region_fraction"] <= 1.0
 
 
 def test_run_rejects_empty_statement():
