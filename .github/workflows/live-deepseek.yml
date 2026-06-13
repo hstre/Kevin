@@ -1,0 +1,27 @@
+name: live-deepseek
+
+# A real-LLM smoke test, separate from the offline CI (which runs on every push
+# with the deterministic MockLLM). This one spends DeepSeek tokens, so it runs only
+# on pushes to main and on manual dispatch. Fork PRs cannot read the secret and the
+# script skips cleanly when no key is present.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (with llm extra)
+        run: python -m pip install -e ".[llm]"
+      - name: Real DeepSeek smoke test
+        env:
+          KEVIN_USE_REAL_LLM: "1"
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python scripts/live_smoke.py
