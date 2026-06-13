@@ -38,6 +38,9 @@ usually blur together:
    reuse old *solutions*. We extract the abstract *Denkbewegung* — the operator
    sequence — from a domain and apply it to a new field where nobody has tried it:
 
+   The seed library ships **20 methods across 17 domains** (`GET /api/methods`).
+   A sample:
+
    | Method | Origin | Content-free shape |
    |---|---|---|
    | limit-case analysis | mathematics | push variables to the extremes; read off the rule between |
@@ -46,6 +49,12 @@ usually blur together:
    | source by interest | history | discount evidence by its producer's stake |
    | failure-mode analysis | engineering | enumerate how it breaks before how it works |
    | claim-splitting | DESi | split → check each atom → flag conflicts → consolidate |
+   | first-principles reduction | philosophy | drop convention to the irreducible, rebuild upward |
+   | five whys | manufacturing | chase the causal chain past symptoms to the removable root |
+   | premortem | decision-science | assume it failed; work backward into present safeguards |
+   | constraint relaxation | optimization | drop the hardest constraint, solve free, re-impose, keep survivors |
+   | emergence search | complexity | specify local rules; read the global pattern off their interaction |
+   | Occam pruning | philosophy | among adequate explanations, prefer the fewest assumptions |
 
    This is **methodical** creativity, not merely semantic creativity — and it is
    close to what strong human creativity actually does: carry a method across a

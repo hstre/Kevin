@@ -50,7 +50,7 @@ class Kevin:
         problem: Problem,
         *,
         top_spaces: int = 2,
-        methods_per_target: int = 1,
+        methods_per_target: int = 2,
         discipline_threshold: float = 0.7,
     ) -> CreativeRun:
         """One full creative pass. Deterministic given the same LLM.

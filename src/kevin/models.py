@@ -76,6 +76,8 @@ class Affinity(StrEnum):
     INVARIANT = "invariant"        # find what must not change
     ADVERSARIAL = "adversarial"    # attack your own answer
     ANALOGY = "analogy"            # transport structure across domains
+    ABSTRACTION = "abstraction"    # move between levels of generality
+    COMPOSITION = "composition"    # combine parts into an emergent whole
 
 
 class Verdict(StrEnum):
