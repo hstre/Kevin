@@ -181,7 +181,11 @@ class OpenAICompatibleLLM:
                 "Install it with: pip install 'kevin[llm]'"
             ) from exc
 
-        deepseek = api_key or os.getenv("DEEPSEEK_API_KEY")
+        # Accept either secret name (DEEPSEEK_API_KEY or DEEPSEEK_API_KEY2) so a
+        # stored secret works regardless of which slot it was put in.
+        deepseek = (
+            api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("DEEPSEEK_API_KEY2")
+        )
         openai_key = os.getenv("OPENAI_API_KEY")
         if deepseek:
             self._model = model or "deepseek-chat"
