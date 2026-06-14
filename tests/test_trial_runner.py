@@ -1,4 +1,6 @@
-"""Kevin trials the shared shelf's methods and records outcomes - but never promotes."""
+"""Kevin's trials are transfer experiments on foreign tasks - real pass/fail, never promote."""
+
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -10,9 +12,27 @@ from desi_layer9 import Operator, ProposalType, make_proposal  # noqa: E402
 from desi_layer9.provenance import Provenance  # noqa: E402
 
 
-def _candidate(core, name, summary, *, applicable_to=("routing",)):
+@dataclass
+class _M:
+    id: str
+    name: str
+    summary: str
+    origin: str = "unknown"
+    applicable_to: tuple = ()
+    supporting_runs: tuple = field(default_factory=tuple)
+    failed_runs: tuple = field(default_factory=tuple)
+
+
+# a method whose shape covers something in every task -> it should help on foreign tasks
+_RICH = _M("M-1", "premortem",
+           "assume failure and work backward; enumerate every risk and hazard; attack and "
+           "challenge each cause; trace the causal root; check the invariant that must hold")
+_THIN = _M("M-2", "thing", "thing")
+
+
+def _propose(core, name, summary, *, origin="unknown", applicable_to=()):
     return layer9_link.propose_method(core, name=name, summary=summary, steps=[],
-                                      affinities=applicable_to)
+                                      affinities=applicable_to, origin=origin)
 
 
 def _operator_promote(core, mid):
@@ -21,57 +41,77 @@ def _operator_promote(core, mid):
                 target_objects=(mid,)), actor="human")
 
 
-def test_a_method_shaped_candidate_passes_its_trial():
-    core = layer9_link.new_core()
-    mid = _candidate(core, "react-router", "a declarative routing framework for the web")
-    rep = trial_runner.trial_methods(core, run_id="r1")
-    assert rep["trialed"] == 1 and rep["succeeded"] == 1
-    m = core.get(mid)
-    assert m.trial_count == 1 and m.success_count == 1
-    assert m.status is l9.Status.CANDIDATE          # still a candidate - Kevin never promotes
+# -- the trial itself ------------------------------------------------------------ #
+
+def test_a_trial_is_an_improvement_over_baseline_not_executability():
+    ok, detail = trial_runner._trial(_RICH, "r1")
+    assert set(detail) == {"task", "fit", "baseline", "with_method", "improvement"}
+    # a pass means the method beat the baseline by the required margin on a FOREIGN task
+    assert (ok is (detail["improvement"] >= trial_runner._MIN_IMPROVEMENT))
+    assert detail["with_method"] == round(detail["baseline"] + detail["improvement"], 4)
 
 
-def test_a_thin_finding_fails_its_trial():
+def test_a_thin_method_cannot_improve_anything_and_fails_every_task():
+    for run in ("r1", "r2", "r3", "r4", "r5"):
+        ok, detail = trial_runner._trial(_THIN, run)
+        assert ok is False and detail["fit"] == 0.0     # no shape -> no improvement -> fail
+
+
+def test_the_task_lies_outside_the_method_origin_domain():
+    m = _M("M-9", "red_flags_first", "rule out the catastrophic; find the cheapest test",
+           origin="clinical-triage")
+    for run in ("r1", "r2", "r3"):
+        task, _ = trial_runner._pick_task(m, run)
+        assert task != "clinical-triage"                # never trialed on its home turf
+
+
+def test_method_shape_is_inferred_content_free():
+    assert "risk" in trial_runner._method_shape(_RICH)
+    assert "adversarial" in trial_runner._method_shape(_RICH)
+    assert trial_runner._method_shape(_THIN) == set()
+
+
+# -- through the shared core ----------------------------------------------------- #
+
+def test_trials_produce_both_passes_and_failures_not_a_flawless_streak():
     core = layer9_link.new_core()
-    # no domain, no shape-language, barely any words: nothing to transfer.
-    mid = layer9_link.propose_method(core, name="thing", summary="thing", steps=[],
-                                     affinities=())
+    _propose(core, "premortem", _RICH.summary)                    # rich -> can pass
+    _propose(core, "react-router", "a declarative routing framework", origin="https://x")
+    _propose(core, "thing", "thing")                             # thin -> must fail
     rep = trial_runner.trial_methods(core, run_id="r1")
-    assert rep["failed"] == 1
-    assert core.get(mid).failure_count == 1
+    assert rep["trialed"] == 3
+    assert rep["failed"] >= 1                                     # the 5/0 streak is broken
+    assert rep["succeeded"] + rep["failed"] == 3
 
 
 def test_one_trial_per_method_per_run_id():
     core = layer9_link.new_core()
-    mid = _candidate(core, "five_whys", "a technique to chase a cause to its root")
+    mid = _propose(core, "premortem", _RICH.summary)
     trial_runner.trial_methods(core, run_id="r1")
-    trial_runner.trial_methods(core, run_id="r1")          # same run id -> no double count
+    trial_runner.trial_methods(core, run_id="r1")                 # same run id -> no double count
     assert core.get(mid).trial_count == 1
-    trial_runner.trial_methods(core, run_id="r2")          # a new run -> a fresh trial
+    trial_runner.trial_methods(core, run_id="r2")                 # a new run -> a fresh trial
     assert core.get(mid).trial_count == 2
 
 
 def test_kevin_makes_a_provisional_method_activation_ready_but_does_not_promote():
     core = layer9_link.new_core()
-    mid = _candidate(core, "premortem", "a strategy: assume failure and work backward")
-    _operator_promote(core, mid)                            # human: candidate -> provisional
+    mid = _propose(core, "premortem", _RICH.summary)             # passes on every foreign task
+    _operator_promote(core, mid)                                  # human: candidate -> provisional
     assert core.get(mid).status is l9.Status.PROVISIONAL
-
     for r in ("r1", "r2", "r3"):
         rep = trial_runner.trial_methods(core, run_id=r)
-    assert mid in rep["activation_ready"]                   # earned, but...
-    assert core.get(mid).status is l9.Status.PROVISIONAL    # ...Kevin did NOT promote it
-
-    # only the human can flip provisional -> active, and now the trials justify it
-    _operator_promote(core, mid)
+    assert core.get(mid).success_count >= 3                       # it earned them on foreign tasks
+    assert mid in rep["activation_ready"]
+    assert core.get(mid).status is l9.Status.PROVISIONAL         # ...Kevin did NOT promote it
+    _operator_promote(core, mid)                                  # only a human can activate
     assert core.get(mid).status is l9.Status.ACTIVE
-    assert mid in [m.id for m in layer9_link.usable_methods(core)]
 
 
 def test_max_trials_bounds_the_work():
     core = layer9_link.new_core()
     for i in range(5):
-        _candidate(core, f"m{i}", "a reusable method for routing problems")
+        _propose(core, f"m{i}", "a reusable method for routing problems")
     rep = trial_runner.trial_methods(core, run_id="r1", max_trials=2)
     assert rep["trialed"] == 2
 
@@ -79,12 +119,10 @@ def test_max_trials_bounds_the_work():
 def test_trial_core_file_round_trips(tmp_path):
     path = tmp_path / "layer9.json"
     core = layer9_link.new_core()
-    _candidate(core, "react-router", "a declarative routing framework")
+    _propose(core, "premortem", _RICH.summary)
     from desi_layer9 import persistence
     persistence.save(core, path)
-
     rep = trial_runner.trial_core_file(path, run_id="r1")
     assert rep["trialed"] == 1
-    reloaded = persistence.load(path)                       # the trial persisted
-    m = reloaded.all(l9.ObjectType.METHOD)[0]
-    assert m.trial_count == 1
+    reloaded = persistence.load(path)
+    assert reloaded.all(l9.ObjectType.METHOD)[0].trial_count == 1

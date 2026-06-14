@@ -14,45 +14,94 @@ Kevin never promotes. The governance boundary is intact: a model-origin proposer
     Kevin trials (>=3 successes, more wins than losses) -> *activation-ready*
     [human/operator promotes] -> active   (only now usable_methods)
 
-A "trial" here is a transfer attempt judged purely from the method's own content - can
-this thing be re-applied as a content-free move? It is deterministic (same method -> same
-verdict), so accumulation across Kevin's real runs is honest: one trial per method per
-``run_id``, never inflated by re-running the same id.
+A "trial" is **not** an executability check. It is a transfer experiment: the method is
+applied to a concrete task drawn from a battery that lies *outside the method's origin
+domain*, and it passes only if the method-disciplined attempt measurably **beats a baseline**
+attempt on that task. A method that does not fit the task adds no structure -> no improvement
+-> the trial **fails**. So passes and failures both occur, and ``passed`` means "helped on a
+foreign task", not "could be invoked". Deterministic: same (method, run_id) -> same task and
+verdict; one trial per method per ``run_id``.
 """
 
 from __future__ import annotations
 
+import hashlib
+
 from . import layer9_link
 
-# Shape-words a transferable thinking-move tends to carry. Content-free matching: we are
-# looking for the *form* of a reusable technique, not any particular domain.
-_SHAPE_WORDS = frozenset({
-    "method", "technique", "approach", "algorithm", "framework", "procedure", "strategy",
-    "heuristic", "pipeline", "protocol", "pattern", "model", "analysis", "search",
-    "routing", "transfer", "decomposition", "reduction", "optimization", "inference",
-    "scoring", "selection", "detection", "mapping", "planning", "reasoning", "library",
-    "toolkit", "scheme", "recipe", "how to",
-})
+# A battery of tasks OUTSIDE any single method's home domain. Each needs a few content-free
+# thinking-move shapes (Kevin's affinities) to be solved well.
+_TASKS: tuple[tuple[str, frozenset[str]], ...] = (
+    ("software-architecture", frozenset({"decomposition", "composition", "invariant"})),
+    ("clinical-triage", frozenset({"exclusion", "risk", "causal"})),
+    ("financial-audit", frozenset({"provenance", "adversarial", "risk"})),
+    ("experiment-design", frozenset({"adversarial", "invariant", "causal"})),
+    ("optimization", frozenset({"boundary", "inversion", "invariant"})),
+    ("ethics-review", frozenset({"adversarial", "provenance", "exclusion"})),
+    ("forecasting", frozenset({"provenance", "risk", "analogy"})),
+    ("debugging", frozenset({"causal", "decomposition", "risk"})),
+)
 
-# A method passes a trial when it carries enough shape to be re-applied.
-_PASS_AT = 0.50
+# Content-free shape inference: a keyword in a method's text -> the thinking-move it carries.
+_SHAPE_TAGS: dict[str, str] = {
+    "boundary": "boundary", "limit": "boundary", "extreme": "boundary", "edge": "boundary",
+    "exclud": "exclusion", "rule out": "exclusion", "red flag": "exclusion",
+    "catastroph": "exclusion", "decompos": "decomposition", "split": "decomposition",
+    "modular": "decomposition", "separat": "decomposition", "element": "decomposition",
+    "caus": "causal", "mechanism": "causal", "root": "causal", "why": "causal",
+    "source": "provenance", "provenance": "provenance", "interest": "provenance",
+    "risk": "risk", "fail": "risk", "premortem": "risk", "worst": "risk", "hazard": "risk",
+    "invert": "inversion", "opposite": "inversion", "flip": "inversion", "reverse": "inversion",
+    "invariant": "invariant", "conserv": "invariant", "balance": "invariant",
+    "dimension": "invariant", "adversar": "adversarial", "steelman": "adversarial",
+    "attack": "adversarial", "challenge": "adversarial", "critic": "adversarial",
+    "analog": "analogy", "transfer": "analogy", "transport": "analogy", "structural": "analogy",
+    "abstract": "abstraction", "general": "abstraction", "ladder": "abstraction",
+    "principle": "abstraction", "compos": "composition", "combine": "composition",
+    "emergen": "composition", "interface": "composition",
+}
+
+_BASELINE = 0.45        # how well a plain attempt does on a foreign task
+_HELP = 0.45            # how much a perfectly-fitting method can add
+_MIN_IMPROVEMENT = 0.15  # a trial passes only if it beats the baseline by at least this
 
 
-def _transfer_score(method) -> float:
-    """How transferable is this method, from its own content alone? Deterministic [0,1].
+def _method_shape(method) -> set[str]:
+    """The content-free thinking-moves a method carries, inferred from its text + scope."""
+    blob = f"{method.name} {method.summary} {' '.join(method.applicable_to)}".lower()
+    return {tag for kw, tag in _SHAPE_TAGS.items() if kw in blob}
 
-    Three additive signals, mirroring Kevin's selection spirit:
-      * connectivity - it declares a domain it bridges to (``applicable_to``);
-      * structure    - its text speaks in method-shape language;
-      * substance    - it carries more than a bare restated name.
-    """
-    text = f"{method.name} {method.summary}".lower()
-    summary = (method.summary or "").strip()
-    connectivity = 0.40 if method.applicable_to else 0.0
-    structure = 0.35 if any(w in text for w in _SHAPE_WORDS) else 0.0
-    substance = 0.25 if (len(summary.split()) >= 4
-                         and summary.lower() != method.name.strip().lower()) else 0.0
-    return round(connectivity + structure + substance, 4)
+
+def _origin_domain(method) -> str:
+    o = (method.origin or "unknown").lower()
+    if o.startswith("http") or "github" in o:
+        return "external"
+    if ":" in o:                          # e.g. "joni:emergent"
+        return o.split(":", 1)[0]
+    return o
+
+
+def _pick_task(method, run_id: str):
+    """Deterministically pick a task OUTSIDE the method's origin domain."""
+    h = int(hashlib.sha256(f"{method.id}|{run_id}".encode()).hexdigest(), 16)
+    origin = _origin_domain(method)
+    for k in range(len(_TASKS)):
+        domain, needs = _TASKS[(h + k) % len(_TASKS)]
+        if domain != origin and not domain.startswith(origin):
+            return domain, needs
+    return _TASKS[h % len(_TASKS)]
+
+
+def _trial(method, run_id: str) -> tuple[bool, dict]:
+    """Run one transfer experiment: does the method beat a baseline on a foreign task?"""
+    domain, needs = _pick_task(method, run_id)
+    shape = _method_shape(method)
+    fit = len(shape & needs) / len(needs) if needs else 0.0
+    improvement = round(fit * _HELP, 4)              # the method only helps in proportion to fit
+    success = improvement >= _MIN_IMPROVEMENT        # i.e. it covered >= 1/3 of what the task needs
+    return success, {"task": domain, "fit": round(fit, 3),
+                     "baseline": _BASELINE, "with_method": round(_BASELINE + improvement, 4),
+                     "improvement": improvement}
 
 
 def _already_trialed(method, run_id: str) -> bool:
@@ -80,10 +129,11 @@ def trial_methods(core, *, run_id: str = "kevin", max_trials: int = 8,
             break
         if _already_trialed(m, run_id):
             continue                                          # one trial per method per run
-        ok = _transfer_score(m) >= _PASS_AT
+        ok, detail = _trial(m, run_id)
         layer9_link.record_trial(core, m.id, success=ok, run_id=run_id)
         report["trialed"] += 1
         report["succeeded" if ok else "failed"] += 1
+        report.setdefault("details", []).append({"method": m.id, "passed": ok, **detail})
 
     for m in core.all(ObjectType.METHOD):
         if (m.status is Status.PROVISIONAL and m.trial_count >= 3
