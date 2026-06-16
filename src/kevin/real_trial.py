@@ -219,3 +219,59 @@ def run_example() -> TrialResult:
         baseline=baseline_solver, intervention=method_solver,
         negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
         min_effect=0.34, processor_model="none")
+
+
+# --------------------------------------------------------------------------------------------- #
+# The first CONCRETE trial: frozen_joni_conflict_cases_v1. A curated, hand-labelled battery
+# representative of the conflict pairs Joni actually produces - numeric paraphrases that the loop
+# wrongly opened as HARD conflicts (the C-71/C-87 case: 31 vs 34 exchanges) versus real negations
+# that genuinely contradict. The gold labels are assigned by the curator, NOT by the method under
+# test (so the trial is not circular). It measures whether the "contradiction-first review" method
+# (check polarity before similarity) reduces the false-contradiction rate versus the naive
+# similarity baseline, with the structureless sham as a negative control.
+# --------------------------------------------------------------------------------------------- #
+def frozen_joni_conflict_cases_v1() -> TaskSet:
+    cases = (
+        # false conflicts: same stance, differ only in a number -> gold = duplicate
+        TaskCase("fc1", {"a": "the thread had 31 exchanges before resolution",
+                         "b": "the thread had 34 exchanges before resolution"},
+                 {"label": "duplicate"}),
+        TaskCase("fc2", {"a": "session contamination dominates 62% of model variance",
+                         "b": "session contamination dominates 67% of model variance"},
+                 {"label": "duplicate"}),
+        TaskCase("fc3", {"a": "the model needed 12 retries on the benchmark",
+                         "b": "the model needed 9 retries on the benchmark"},
+                 {"label": "duplicate"}),
+        TaskCase("fc4", {"a": "routing cut p95 latency to 120 ms",
+                         "b": "routing cut p95 latency to 140 ms"},
+                 {"label": "duplicate"}),
+        TaskCase("fc5", {"a": "the corpus contains 3 independent sources",
+                         "b": "the corpus contains 5 independent sources"},
+                 {"label": "duplicate"}),
+        # real contradictions: opposite polarity -> gold = contradiction
+        TaskCase("tc1", {"a": "local routing reduces latency",
+                         "b": "local routing does not reduce latency"},
+                 {"label": "contradiction"}),
+        TaskCase("tc2", {"a": "episodic memory improves continuity",
+                         "b": "episodic memory never improves continuity"},
+                 {"label": "contradiction"}),
+        TaskCase("tc3", {"a": "the cache is safe under load",
+                         "b": "the cache is not safe under load"},
+                 {"label": "contradiction"}),
+        TaskCase("tc4", {"a": "distillation preserves calibration",
+                         "b": "distillation does not preserve calibration"},
+                 {"label": "contradiction"}),
+    )
+    return TaskSet(id="frozen_joni_conflict_cases", version="v1", cases=cases)
+
+
+def run_joni_conflict_trial() -> TrialResult:
+    """The first concrete real trial on Joni's own kind of material. Deterministic in v1 (the
+    PROTOCOL is what is under test); a model-backed intervention solver (Granite annotating each
+    pair) plugs into the same runner without changing the decision, which stays on the metric."""
+    return run_real_trial(
+        method_id="contradiction-first-review", task_set=frozen_joni_conflict_cases_v1(),
+        metric_name="false_contradiction_rate", metric=false_contradiction_rate,
+        baseline=baseline_solver, intervention=method_solver,
+        negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
+        min_effect=0.34, processor_model="none")

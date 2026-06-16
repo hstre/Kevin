@@ -44,3 +44,11 @@ def test_negative_control_guards_against_measuring_noise():
         baseline=real_trial.baseline_solver, intervention=real_trial.negative_control_solver,
         negative_control=real_trial.negative_control_solver, lower_is_better=True, min_effect=0.34)
     assert r.passed is False                          # control not clean -> never a pass
+
+
+def test_frozen_joni_conflict_cases_v1_passes_on_real_material():
+    r = real_trial.run_joni_conflict_trial()
+    assert r.task_set.startswith("frozen_joni_conflict_cases@v1") and r.task_set_sha
+    assert r.baseline > r.intervention and r.intervention == 0.0   # method removes false conflicts
+    assert r.passed is True and r.direction == "positive"
+    assert r.epistemic_weight == "provisional"                     # real, not human-confirmed
