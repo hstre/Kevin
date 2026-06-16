@@ -1,9 +1,12 @@
 """Architecture invariant: the keyword-shape trial is a SIMULATION, and says so. Its numbers must
 never be presentable as method effectiveness - every report carries the honesty tags."""
 
-import desi_layer9 as l9
+import pytest
 
-from kevin import layer9_link, trial_runner
+pytest.importorskip("desi_layer9")  # desi_layer9 is an OPTIONAL integration; skip if not installed
+import desi_layer9 as l9  # noqa: E402
+
+from kevin import layer9_link, trial_runner  # noqa: E402
 
 
 def _shelf():
