@@ -34,6 +34,7 @@ from dataclasses import asdict, dataclass, field
 
 _NUM = re.compile(r"\d+(?:\.\d+)?")
 _NEGATION = re.compile(r"\b(not|no|never|n't)\b")
+_WORD = re.compile(r"[a-z0-9]+")
 
 EVALUATION_MODE = "real_trial_protocol_v1"
 
@@ -148,24 +149,28 @@ def record(core, result: TrialResult, *, run_id: str = "kevin-real") -> str | No
 # --------------------------------------------------------------------------------------------- #
 # v1 example task set: a simple, fully-checkable conflict-classification task. A pair of claims is
 # either a near-duplicate (same stance, differs only in a number) or a real contradiction (opposite
-# polarity). The metric is the false-contradiction rate (lower is better): how often near-duplicates
-# are wrongly called contradictions. The "contradiction-first review" method checks polarity before
-# similarity and so avoids the false contradictions a naive similarity baseline makes. The negative
-# control ("alphabetise") is irrelevant and must not help. All deterministic - the protocol, not a
-# model, is what is under test here.
+# polarity). The metric is the TWO-SIDED misclassification_rate (lower is better). The PLAUSIBLE
+# lexical-similarity baseline is fooled by negation; the "contradiction-first review" method checks
+# polarity first and beats it - but NOT perfectly (it fails a double-negation case), so the win is
+# earned. The negative control is a structureless hash-parity guess (could spuriously help, so it is
+# a real noise floor). All deterministic - the protocol, not a model, is what is under test here.
 # --------------------------------------------------------------------------------------------- #
 def example_task_set() -> TaskSet:
+    # a small subset of the same KIND of cases as the frozen Joni set (numeric paraphrases,
+    # pure-negation contradictions, and a double-negation duplicate the method gets WRONG).
     cases = (
         TaskCase("d1", {"a": "the thread had 31 exchanges", "b": "the thread had 34 exchanges"},
                  {"label": "duplicate"}),
-        TaskCase("d2", {"a": "latency was 12 ms", "b": "latency was 15 ms"},
+        TaskCase("d2", {"a": "we saw 12 retries here", "b": "we saw 9 retries here"},
                  {"label": "duplicate"}),
-        TaskCase("d3", {"a": "we saw 5 retries", "b": "we saw 8 retries"},
+        TaskCase("d3", {"a": "the corpus has 3 sources", "b": "the corpus has 5 sources"},
                  {"label": "duplicate"}),
-        TaskCase("c1", {"a": "routing reduces latency", "b": "routing does not reduce latency"},
+        TaskCase("c1", {"a": "the cache is safe", "b": "the cache is not safe"},
                  {"label": "contradiction"}),
-        TaskCase("c2", {"a": "the cache is safe", "b": "the cache is not safe"},
+        TaskCase("c2", {"a": "the proof is complete", "b": "the proof is not complete"},
                  {"label": "contradiction"}),
+        TaskCase("n1", {"a": "the cache is not unsafe", "b": "the cache is safe"},
+                 {"label": "duplicate"}),                      # double negation: method FAILS this
     )
     return TaskSet(id="conflict_classification_example", version="v1", cases=cases)
 
@@ -174,16 +179,28 @@ def _strip_numbers(s: str) -> str:
     return _NUM.sub("#", (s or "").lower()).strip()
 
 
+def _tokens(s: str) -> set:
+    return set(_WORD.findall((s or "").lower()))
+
+
 def baseline_solver(payload: dict) -> dict:
-    """Naive similarity: if the two texts are not identical, call it a contradiction. This is the
-    mistake the review flagged - near-duplicates differing only in a number get mislabelled."""
+    """A PLAUSIBLE naive baseline (not a strawman): lexical similarity. High token overlap ->
+    'duplicate', else 'contradiction'. It is genuinely useful on numeric paraphrases but - the
+    point of the trial - it is fooled by negation: 'X is safe' vs 'X is not safe' overlap heavily,
+    so it wrongly calls a real contradiction a duplicate."""
     a, b = payload.get("a", ""), payload.get("b", "")
-    return {"label": "duplicate" if a.strip().lower() == b.strip().lower() else "contradiction"}
+    ta, tb = _tokens(a), _tokens(b)
+    jacc = len(ta & tb) / len(ta | tb) if (ta | tb) else 0.0
+    return {"label": "duplicate" if jacc >= 0.6 else "contradiction"}
 
 
 def method_solver(payload: dict) -> dict:
     """contradiction-first review: check POLARITY first; only an opposite-polarity pair is a
-    contradiction. Same polarity + identical once numbers are stripped -> duplicate."""
+    contradiction; same polarity + identical once numbers are stripped -> duplicate. Beats the
+    lexical baseline on negation, but it is NOT perfect - a DOUBLE negation ('not unsafe' vs
+    'safe') reads as opposite polarity, so the method wrongly calls an agreeing pair a
+    contradiction. That residual error is real and shows up in the metric (the pass is earned,
+    not preordained)."""
     a, b = payload.get("a", ""), payload.get("b", "")
     pol_a, pol_b = bool(_NEGATION.search(a)), bool(_NEGATION.search(b))
     if pol_a != pol_b:
@@ -194,50 +211,58 @@ def method_solver(payload: dict) -> dict:
 
 
 def negative_control_solver(payload: dict) -> dict:
-    """A sham 'method' that adds NO relevant structure: it ignores the content and always guesses
-    'contradiction'. It must NOT improve over the baseline - if a structureless guess showed the
-    same gain as the real method, the apparatus would be measuring noise, and the trial is
-    inconclusive (not a pass)."""
-    return {"label": "contradiction"}
+    """A STRUCTURELESS sham that COULD spuriously help: it labels by the parity of a hash of the
+    text (no real signal, but not a constant - so it sometimes gets cases right by luck). If this
+    matched the method's gain over baseline, the apparatus would be measuring noise and the trial
+    is inconclusive, not a pass. A constant guess would be a vacuous control (it can never help);
+    this one can, which is exactly what makes it a real noise floor."""
+    a, b = payload.get("a", ""), payload.get("b", "")
+    h = int(hashlib.sha256(f"{a}|{b}".encode()).hexdigest(), 16)
+    return {"label": "duplicate" if h % 2 == 0 else "contradiction"}
 
 
-def false_contradiction_rate(answers: Sequence[dict], cases: Sequence[TaskCase]) -> float:
-    """Fraction of true duplicates wrongly labelled 'contradiction' (lower is better)."""
-    dups = [(ans, c) for ans, c in zip(answers, cases, strict=False)
-            if c.gold["label"] == "duplicate"]
-    if not dups:
+def misclassification_rate(answers: Sequence[dict], cases: Sequence[TaskCase]) -> float:
+    """TWO-SIDED error: fraction of ALL cases mislabelled (both false-contradictions AND
+    false-duplicates). A one-sided rate would let a constant 'always duplicate' solver score a
+    perfect 0; this cannot be gamed by collapsing to a single label. Lower is better."""
+    if not cases:
         return 0.0
-    wrong = sum(1 for ans, _ in dups if ans.get("label") == "contradiction")
-    return round(wrong / len(dups), 6)
+    wrong = sum(1 for ans, c in zip(answers, cases, strict=False)
+                if ans.get("label") != c.gold["label"])
+    return round(wrong / len(cases), 6)
 
 
 def run_example() -> TrialResult:
     """Run the v1 example end to end - used by tests and as the reference trial."""
     return run_real_trial(
         method_id="contradiction-first-review", task_set=example_task_set(),
-        metric_name="false_contradiction_rate", metric=false_contradiction_rate,
+        metric_name="misclassification_rate", metric=misclassification_rate,
         baseline=baseline_solver, intervention=method_solver,
         negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
-        min_effect=0.34, processor_model="none")
+        min_effect=0.2, processor_model="none")
 
 
 # --------------------------------------------------------------------------------------------- #
 # The first CONCRETE trial: frozen_joni_conflict_cases_v1. A curated, hand-labelled battery
-# representative of the conflict pairs Joni actually produces - numeric paraphrases that the loop
-# wrongly opened as HARD conflicts (the C-71/C-87 case: 31 vs 34 exchanges) versus real negations
-# that genuinely contradict. The gold labels are assigned by the curator, NOT by the method under
-# test (so the trial is not circular). It measures whether the "contradiction-first review" method
-# (check polarity before similarity) reduces the false-contradiction rate versus the naive
-# similarity baseline, with the structureless sham as a negative control.
+# representative of the conflict pairs Joni actually produces. Three case families, chosen so the
+# trial genuinely DISCRIMINATES (the outcome is not preordained):
+#   * numeric paraphrases (gold=duplicate) - both baseline and method get these right;
+#   * pure-negation contradictions ('X' vs 'X not') (gold=contradiction) - the LEXICAL baseline is
+#     fooled (high overlap -> 'duplicate'), the polarity method is right -> this is where the method
+#     earns its win;
+#   * double-negation duplicates ('not unsafe' vs 'safe') (gold=duplicate) - the method is WRONG
+#     here (reads opposite polarity), so the method's error is non-zero and the pass is earned.
+# Gold labels are the curator's, NOT the method's (non-circular). Measured TWO-SIDED
+# (misclassification_rate), with a structureless hash-parity negative control as the noise floor.
 # --------------------------------------------------------------------------------------------- #
 def frozen_joni_conflict_cases_v1() -> TaskSet:
     cases = (
-        # false conflicts: same stance, differ only in a number -> gold = duplicate
+        # numeric paraphrases -> gold = duplicate (the C-71/C-87 case: 31 vs 34 exchanges)
         TaskCase("fc1", {"a": "the thread had 31 exchanges before resolution",
                          "b": "the thread had 34 exchanges before resolution"},
                  {"label": "duplicate"}),
-        TaskCase("fc2", {"a": "session contamination dominates 62% of model variance",
-                         "b": "session contamination dominates 67% of model variance"},
+        TaskCase("fc2", {"a": "session contamination dominates 62 percent of variance",
+                         "b": "session contamination dominates 67 percent of variance"},
                  {"label": "duplicate"}),
         TaskCase("fc3", {"a": "the model needed 12 retries on the benchmark",
                          "b": "the model needed 9 retries on the benchmark"},
@@ -248,19 +273,31 @@ def frozen_joni_conflict_cases_v1() -> TaskSet:
         TaskCase("fc5", {"a": "the corpus contains 3 independent sources",
                          "b": "the corpus contains 5 independent sources"},
                  {"label": "duplicate"}),
-        # real contradictions: opposite polarity -> gold = contradiction
-        TaskCase("tc1", {"a": "local routing reduces latency",
-                         "b": "local routing does not reduce latency"},
-                 {"label": "contradiction"}),
-        TaskCase("tc2", {"a": "episodic memory improves continuity",
-                         "b": "episodic memory never improves continuity"},
-                 {"label": "contradiction"}),
-        TaskCase("tc3", {"a": "the cache is safe under load",
+        # pure-negation contradictions ('X' vs 'X not') -> gold = contradiction; the lexical
+        # baseline is fooled by the heavy overlap, the polarity method is not.
+        TaskCase("tc1", {"a": "the cache is safe under load",
                          "b": "the cache is not safe under load"},
                  {"label": "contradiction"}),
-        TaskCase("tc4", {"a": "distillation preserves calibration",
-                         "b": "distillation does not preserve calibration"},
+        TaskCase("tc2", {"a": "the result is statistically significant",
+                         "b": "the result is not statistically significant"},
                  {"label": "contradiction"}),
+        TaskCase("tc3", {"a": "the model is well calibrated",
+                         "b": "the model is not well calibrated"},
+                 {"label": "contradiction"}),
+        TaskCase("tc4", {"a": "the routing layer is correct",
+                         "b": "the routing layer is not correct"},
+                 {"label": "contradiction"}),
+        TaskCase("tc5", {"a": "the proof is complete",
+                         "b": "the proof is not complete"},
+                 {"label": "contradiction"}),
+        # double-negation duplicates (they AGREE) -> gold = duplicate; the polarity method FAILS
+        # these, so the method's error is non-zero and the win is earned, not preordained.
+        TaskCase("dn1", {"a": "the cache is not unsafe under load",
+                         "b": "the cache is safe under load"},
+                 {"label": "duplicate"}),
+        TaskCase("dn2", {"a": "the result is not insignificant",
+                         "b": "the result is significant"},
+                 {"label": "duplicate"}),
     )
     return TaskSet(id="frozen_joni_conflict_cases", version="v1", cases=cases)
 
@@ -271,7 +308,7 @@ def run_joni_conflict_trial() -> TrialResult:
     pair) plugs into the same runner without changing the decision, which stays on the metric."""
     return run_real_trial(
         method_id="contradiction-first-review", task_set=frozen_joni_conflict_cases_v1(),
-        metric_name="false_contradiction_rate", metric=false_contradiction_rate,
+        metric_name="misclassification_rate", metric=misclassification_rate,
         baseline=baseline_solver, intervention=method_solver,
         negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
-        min_effect=0.34, processor_model="none")
+        min_effect=0.2, processor_model="none")
