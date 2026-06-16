@@ -21,6 +21,17 @@ attempt on that task. A method that does not fit the task adds no structure -> n
 -> the trial **fails**. So passes and failures both occur, and ``passed`` means "helped on a
 foreign task", not "could be invoked". Deterministic: same (method, run_id) -> same task and
 verdict; one trial per method per ``run_id``.
+
+.. warning::
+   **This is a SYNTHETIC TRIAL SIMULATOR, not an empirical effectiveness test.** The verdict
+   comes from a content-free *keyword-shape overlap* between the method's text and a task's
+   needs - it does **not** run the method on real cases, has no real baseline/intervention
+   measurement, and carries **no epistemic weight**. Its pass/fail numbers are a simulation
+   artefact: "the simulator classified N methods as passing", never "N methods are effective".
+   Every report is tagged ``evaluation_mode="synthetic_mock"`` / ``epistemic_weight="none"`` so
+   nothing downstream mistakes it for evidence. A real protocol (frozen task set, baseline vs
+   intervention, predefined metric, repetitions, negative control, Layer-9 proposal with full
+   provenance) is the intended replacement (``real_trial_protocol_v1``).
 """
 
 from __future__ import annotations
@@ -28,6 +39,11 @@ from __future__ import annotations
 import hashlib
 
 from . import layer9_link
+
+# This evaluator produces SIMULATION artefacts, not evidence. Surfaced in every report so a
+# consumer can never read the numbers as method effectiveness.
+EVALUATION_MODE = "synthetic_mock"
+EPISTEMIC_WEIGHT = "none"
 
 # A battery of tasks OUTSIDE any single method's home domain. Each needs a few content-free
 # thinking-move shapes (Kevin's affinities) to be solved well.
@@ -120,7 +136,9 @@ def trial_methods(core, *, run_id: str = "kevin", max_trials: int = 8,
 
     wanted = {Status[name.upper()] for name in statuses}
     report = {"trialed": 0, "succeeded": 0, "failed": 0,
-              "activation_ready": [], "run_id": run_id}
+              "activation_ready": [], "run_id": run_id,
+              # honesty tags: these results are a simulation, not an effectiveness measurement.
+              "evaluation_mode": EVALUATION_MODE, "epistemic_weight": EPISTEMIC_WEIGHT}
 
     candidates = sorted((m for m in core.all(ObjectType.METHOD) if m.status in wanted),
                         key=lambda m: m.id)                    # replay-stable order
