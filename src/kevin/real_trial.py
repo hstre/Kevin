@@ -79,6 +79,13 @@ class TrialResult:
     uncertainty: str                   # "low" | "medium" | "high"
     passed: bool                       # decided ONLY by the predefined metric + threshold
     processor_model: str               # model used to PROCESS cases (artefacts only), or "none"
+    # A REAL 95% confidence interval on the ORIENTED delta (positive == better), computed from the
+    # per-repetition baseline/intervention samples (normal approx). For a deterministic apparatus
+    # samples agree, so the interval is the honest degenerate ``[delta, delta]`` (no sampling
+    # variance) - never a fabricated width. ``effect_se`` is the standard error it was built from.
+    min_effect: float = 0.1
+    effect_se: float = 0.0
+    confidence_interval: tuple[float, float] = (0.0, 0.0)
     config: dict = field(default_factory=dict)
     evaluation_mode: str = EVALUATION_MODE
     epistemic_weight: str = "provisional"
@@ -93,14 +100,28 @@ Solver = Callable[[dict], dict]
 Metric = Callable[[Sequence[dict], Sequence[TaskCase]], float]
 
 
-def _measure(solver: Solver, cases: Sequence[TaskCase], metric: Metric, repetitions: int) -> float:
-    """Run a solver over the frozen cases ``repetitions`` times and average the metric. The slot is
-    real even when the solver is deterministic (then every repetition agrees)."""
-    vals = []
+def _samples(solver: Solver, cases: Sequence[TaskCase], metric: Metric,
+             repetitions: int) -> list[float]:
+    """The per-repetition metric values - the raw material for both the mean AND the confidence
+    interval. The slot is real even when the solver is deterministic (then every repetition agrees,
+    so the variance is genuinely zero)."""
+    out = []
     for _ in range(max(1, repetitions)):
         answers = [solver(c.payload) for c in cases]
-        vals.append(metric(answers, cases))
-    return round(sum(vals) / len(vals), 6)
+        out.append(metric(answers, cases))
+    return out
+
+
+def _mean(vals: Sequence[float]) -> float:
+    return sum(vals) / len(vals)
+
+
+def _var(vals: Sequence[float]) -> float:
+    """Sample variance (ddof=1); 0 for <2 samples or a deterministic apparatus."""
+    if len(vals) < 2:
+        return 0.0
+    mu = _mean(vals)
+    return sum((v - mu) ** 2 for v in vals) / (len(vals) - 1)
 
 
 def run_real_trial(*, method_id: str, task_set: TaskSet, metric_name: str, metric: Metric,
@@ -111,12 +132,17 @@ def run_real_trial(*, method_id: str, task_set: TaskSet, metric_name: str, metri
     """Run the protocol and DECIDE by the metric alone. ``passed`` requires (a) the intervention
     beats the baseline by at least ``min_effect`` in the declared direction AND (b) the negative
     control does NOT (else the rig is measuring noise -> inconclusive, not passed)."""
-    b = _measure(baseline, task_set.cases, metric, repetitions)
-    i = _measure(intervention, task_set.cases, metric, repetitions)
-    n = _measure(negative_control, task_set.cases, metric, repetitions)
+    bs = _samples(baseline, task_set.cases, metric, repetitions)
+    is_ = _samples(intervention, task_set.cases, metric, repetitions)
+    ns = _samples(negative_control, task_set.cases, metric, repetitions)
+    b, i, n = round(_mean(bs), 6), round(_mean(is_), 6), round(_mean(ns), 6)
     # signed improvement, oriented so that positive == better
     delta = (b - i) if lower_is_better else (i - b)
     neg_delta = (b - n) if lower_is_better else (n - b)
+    # a REAL 95% CI on the oriented delta: SE of the difference of two independent means.
+    se = (_var(bs) / len(bs) + _var(is_) / len(is_)) ** 0.5
+    half = round(1.959964 * se, 6)
+    ci = (round(delta - half, 6), round(delta + half, 6))
     real_effect = delta >= min_effect
     control_clean = neg_delta < min_effect           # the sham must NOT show the same effect
     passed = bool(real_effect and control_clean)
@@ -130,7 +156,8 @@ def run_real_trial(*, method_id: str, task_set: TaskSet, metric_name: str, metri
         task_set_sha=task_set.sha(), metric=metric_name, lower_is_better=lower_is_better,
         baseline=b, intervention=i, negative_control=n, delta=round(delta, 6),
         repetitions=repetitions, direction=direction, uncertainty=uncertainty, passed=passed,
-        processor_model=processor_model, config=config or {})
+        processor_model=processor_model, min_effect=min_effect, effect_se=round(se, 6),
+        confidence_interval=ci, config=config or {})
 
 
 def record(core, result: TrialResult, *, run_id: str = "kevin-real") -> str | None:
