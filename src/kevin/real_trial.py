@@ -79,6 +79,9 @@ class TrialResult:
     uncertainty: str                   # "low" | "medium" | "high"
     passed: bool                       # decided ONLY by the predefined metric + threshold
     processor_model: str               # model used to PROCESS cases (artefacts only), or "none"
+    # The thinking-move(s) the trialed method exercises - the DESi solution-space axis a result
+    # informs (e.g. "adversarial" for a polarity/contradiction check). Free-form, data-driven.
+    affinities: tuple[str, ...] = ()
     # A REAL 95% confidence interval on the ORIENTED delta (positive == better), computed from the
     # per-repetition baseline/intervention samples (normal approx). For a deterministic apparatus
     # samples agree, so the interval is the honest degenerate ``[delta, delta]`` (no sampling
@@ -128,7 +131,7 @@ def run_real_trial(*, method_id: str, task_set: TaskSet, metric_name: str, metri
                    baseline: Solver, intervention: Solver, negative_control: Solver,
                    lower_is_better: bool = True, repetitions: int = 5,
                    min_effect: float = 0.1, processor_model: str = "none",
-                   config: dict | None = None) -> TrialResult:
+                   affinities: tuple[str, ...] = (), config: dict | None = None) -> TrialResult:
     """Run the protocol and DECIDE by the metric alone. ``passed`` requires (a) the intervention
     beats the baseline by at least ``min_effect`` in the declared direction AND (b) the negative
     control does NOT (else the rig is measuring noise -> inconclusive, not passed)."""
@@ -156,8 +159,8 @@ def run_real_trial(*, method_id: str, task_set: TaskSet, metric_name: str, metri
         task_set_sha=task_set.sha(), metric=metric_name, lower_is_better=lower_is_better,
         baseline=b, intervention=i, negative_control=n, delta=round(delta, 6),
         repetitions=repetitions, direction=direction, uncertainty=uncertainty, passed=passed,
-        processor_model=processor_model, min_effect=min_effect, effect_se=round(se, 6),
-        confidence_interval=ci, config=config or {})
+        processor_model=processor_model, affinities=tuple(affinities), min_effect=min_effect,
+        effect_se=round(se, 6), confidence_interval=ci, config=config or {})
 
 
 def record(core, result: TrialResult, *, run_id: str = "kevin-real") -> str | None:
@@ -266,7 +269,7 @@ def run_example() -> TrialResult:
         metric_name="misclassification_rate", metric=misclassification_rate,
         baseline=baseline_solver, intervention=method_solver,
         negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
-        min_effect=0.2, processor_model="none")
+        min_effect=0.2, processor_model="none", affinities=("adversarial",))
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -338,4 +341,4 @@ def run_joni_conflict_trial() -> TrialResult:
         metric_name="misclassification_rate", metric=misclassification_rate,
         baseline=baseline_solver, intervention=method_solver,
         negative_control=negative_control_solver, lower_is_better=True, repetitions=5,
-        min_effect=0.2, processor_model="none")
+        min_effect=0.2, processor_model="none", affinities=("adversarial",))
