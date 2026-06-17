@@ -51,6 +51,10 @@ def test_kevin_reports_trials_then_an_operator_promotes():
     for _ in range(3):
         layer9_link.record_trial(core, mid, success=True, run_id="r")
 
+    # Kevin's method is model-origin (tainted: unverified_model_output), so a HUMAN must sign off on
+    # it before it may be made authoritative (the contamination flags stay on record)
+    core.submit(operator_proposal(Operator.HUMAN_VALIDATE, {}))
+
     # only now can an operator promote provisional -> active
     core.submit(operator_proposal(Operator.METHOD_PROMOTE, {}))
     assert core.get(mid).status is l9.Status.ACTIVE

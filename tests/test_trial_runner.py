@@ -41,6 +41,14 @@ def _operator_promote(core, mid):
                 target_objects=(mid,)), actor="human")
 
 
+def _human_validate(core, mid):
+    # a Kevin-proposed method is model-origin (tainted: unverified_model_output): before it can be
+    # made authoritative a HUMAN must sign off on it (clears the taint ENFORCEMENT, not the flags).
+    core.submit(make_proposal(ProposalType.METHOD_PROPOSAL, Operator.HUMAN_VALIDATE,
+                payload={}, proposer="human", provenance=Provenance.from_human(),
+                target_objects=(mid,)), actor="human")
+
+
 # -- the trial itself ------------------------------------------------------------ #
 
 def test_a_trial_is_an_improvement_over_baseline_not_executability():
@@ -104,6 +112,7 @@ def test_kevin_makes_a_provisional_method_activation_ready_but_does_not_promote(
     assert core.get(mid).success_count >= 3                       # it earned them on foreign tasks
     assert mid in rep["activation_ready"]
     assert core.get(mid).status is l9.Status.PROVISIONAL         # ...Kevin did NOT promote it
+    _human_validate(core, mid)                                  # a human signs off on the taint
     _operator_promote(core, mid)                                  # only a human can activate
     assert core.get(mid).status is l9.Status.ACTIVE
 
