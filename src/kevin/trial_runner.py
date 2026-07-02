@@ -115,7 +115,7 @@ def _trial(method, run_id: str) -> tuple[bool, dict]:
     fit = len(shape & needs) / len(needs) if needs else 0.0
     improvement = round(fit * _HELP, 4)              # the method only helps in proportion to fit
     success = improvement >= _MIN_IMPROVEMENT        # i.e. it covered >= 1/3 of what the task needs
-    return success, {"task": domain, "fit": round(fit, 3),
+    return success, {"task": domain, "condition": domain, "fit": round(fit, 3),
                      "baseline": _BASELINE, "with_method": round(_BASELINE + improvement, 4),
                      "improvement": improvement}
 
@@ -131,6 +131,12 @@ def trial_methods(core, *, run_id: str = "kevin", max_trials: int = 8,
     Returns a report: how many were trialed/passed/failed this run, and which provisional
     methods are now *activation-ready* (>=3 trials, more successes than failures) - a flag
     for a human; Kevin still does not promote.
+
+    ``report["details"]`` carries one entry per trialed method: ``{"method", "passed", "task",
+    "condition", ...}``. ``condition`` (== ``task``, the foreign task domain the method was trialed
+    on) is a first-class part of the contract: a consumer's retirement logic can tell a method
+    failing on its *home ground* from one merely failing under a NEW condition it never passed on,
+    and hold the latter instead of retiring it. Deterministic: same (method, run_id) -> same task.
     """
     from desi_layer9 import ObjectType, Status
 

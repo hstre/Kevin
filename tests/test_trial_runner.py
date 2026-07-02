@@ -53,7 +53,7 @@ def _human_validate(core, mid):
 
 def test_a_trial_is_an_improvement_over_baseline_not_executability():
     ok, detail = trial_runner._trial(_RICH, "r1")
-    assert set(detail) == {"task", "fit", "baseline", "with_method", "improvement"}
+    assert set(detail) == {"task", "condition", "fit", "baseline", "with_method", "improvement"}
     # a pass means the method beat the baseline by the required margin on a FOREIGN task
     assert (ok is (detail["improvement"] >= trial_runner._MIN_IMPROVEMENT))
     assert detail["with_method"] == round(detail["baseline"] + detail["improvement"], 4)
@@ -135,3 +135,23 @@ def test_trial_core_file_round_trips(tmp_path):
     assert rep["trialed"] == 1
     reloaded = persistence.load(path)
     assert reloaded.all(l9.ObjectType.METHOD)[0].trial_count == 1
+
+
+def test_report_details_carry_the_per_method_condition():
+    """The report exposes, per trialed method, the task/condition it ran under — the contract a
+    consumer's retirement logic needs to hold a failure under a never-validated condition."""
+    core = layer9_link.new_core()
+    _propose(core, "premortem", _RICH.summary)
+    _propose(core, "thing", "thing")
+    rep = trial_runner.trial_methods(core, run_id="r1")
+    assert rep["details"] and len(rep["details"]) == rep["trialed"]
+    for d in rep["details"]:
+        assert {"method", "passed", "task", "condition"} <= d.keys()
+        assert d["condition"] == d["task"]          # condition is the foreign task domain
+    # deterministic: a fresh core reproduces identical conditions for the same run_id
+    core2 = layer9_link.new_core()
+    _propose(core2, "premortem", _RICH.summary)
+    _propose(core2, "thing", "thing")
+    rep3 = trial_runner.trial_methods(core2, run_id="r1")
+    assert ([d["condition"] for d in rep["details"]]
+            == [d["condition"] for d in rep3["details"]])
