@@ -4,9 +4,11 @@ name: live-deepseek
 # with the deterministic MockLLM). This one spends DeepSeek tokens, so it runs only
 # on pushes to main and on manual dispatch. Fork PRs cannot read the secret and the
 # script skips cleanly when no key is present.
+# ABGESCHALTET 2026-07-29 (Projektabschluss): automatische Ausloeser stillgelegt.
+# Es feuert nichts mehr von selbst; ein Lauf ist nur noch von Hand ueber
+# workflow_dispatch moeglich. Zum Reaktivieren die Kommentarzeichen unten entfernen.
 on:
-  push:
-    branches: [main]
+#    branches: [main]
   workflow_dispatch:
 
 jobs:
