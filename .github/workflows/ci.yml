@@ -1,8 +1,11 @@
 name: ci
 
+# ABGESCHALTET 2026-07-29 (Projektabschluss): automatische Ausloeser stillgelegt.
+# Es feuert nichts mehr von selbst; ein Lauf ist nur noch von Hand ueber
+# workflow_dispatch moeglich. Zum Reaktivieren die Kommentarzeichen unten entfernen.
 on:
-  push:
-  pull_request:
+#  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
