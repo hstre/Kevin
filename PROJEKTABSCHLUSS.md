@@ -11,6 +11,18 @@ Die Kreativitäts-Routing-Architektur steht und ist für sich lesbar. Ihre Anbin
 Governance-Instanz entfällt mit diesem Abschluss; die Routing-Idee selbst ist davon unberührt und
 nie Gegenstand der widerlegten Behauptungen gewesen.
 
+
+## Was hier **nicht** widerlegt wurde
+
+Die vier Messungen galten ausschliesslich DESis Entailment- und Governance-Schicht. Die Kreativitäts-Routing-Architektur
+kam in keiner davon vor — in keinem der vier Berichte findet sich dazu eine Zahl. Der Banner dieses
+Repositories behauptete zunächst pauschal, der zentrale Anspruch sei widerlegt; das war für dieses
+Repository falsch und ist korrigiert.
+
+**Nicht widerlegt** und **ungeprüft** sind verschiedene Zustände. Diese Unterscheidung sauber zu
+halten war der Zweck des ganzen Vorhabens; sie beim Abschluss selbst zu verletzen wäre der letzte
+Fehler in einer langen Reihe gewesen.
+
 ## Was gemessen wurde
 
 Der zentrale Anspruch von DESi lautete: eine deterministische Governance-Schicht liefert gegenüber
